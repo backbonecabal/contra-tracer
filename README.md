@@ -1,11 +1,55 @@
 # contra-tracer
 
+### Introduction
+
 Logging and monitoring should be treated as a software feature and not just a
 debugging tool.
 Yet it's common to find logging definitions which use monads and typeclasses
 to do what is essentially printf debugging: the log items are big types like
 text or JSON, and these items may be logged any where, any time, because the
 logging implementation is part of some omnipresent application monad.
+* arrow representation for Tracer
+
+This representation allows for better short-circuiting/laziness. Tracers
+which are known to produce no tracing effects can be ignored, allowing
+us to boast that often, tracing can be made zero-cost by substituting
+the nullTracer appropriately, as opposed to say using CPP to eliminate
+tracing in certain builds.
+
+A consequence of this new design is that you cannot use side-effects
+when computing which tracer to use. That's a good thing; you really
+shouldn't ever have done that to begin with.
+
+* fix license and maintainer
+
+* add ArrowLoop instance
+
+* allow for side-effects in arrow computation
+
+The goal is to support existing use cases in which benign IOs like
+myThreadId and getCurrentTime are used to produce inputs to the tracer
+effects that are emitted. Those are now allowed in the arrow composition
+by way of category/arrow/arrowchoice, but not monad, so we retain the
+ability to see whether a computation will definitely not do any tracing
+effects.
+
+* improve arrow representation yet again
+
+The prior one didn't have proper laziness on nested choice.
+
+```
+arrow $ proc b ->
+  if b
+  then emit (const (pure ())) -< ()
+  else do
+    b' <- effect (error "failure") -< ()
+    if b' then use nullTracer -< () else use nullTracer -< ()
+```
+
+that would failure even when b is False. Proper behaviour: it should
+stop computing as soon as it reaches the False branch, because
+everything after it is known to never emit.
+
 
 This package provides a minimal set of definitions for _contravariant tracing_.
 It is intended to express the pattern--found in logging and monitoring--in which
